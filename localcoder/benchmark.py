@@ -5,42 +5,42 @@ from pathlib import Path
 from typing import Any
 
 
-class DatasetBuilder:
-    def __init__(self, root: str | Path):
-        self.root = Path(root)
-        self.root.mkdir(parents=True, exist_ok=True)
+class BenchmarkRunner:
+    def __init__(self, tasks_path: str | Path):
+        self.tasks_path = Path(tasks_path)
 
-    def add_record(
-        self,
-        prompt: str,
-        output: str,
-        status: str = "completed",
-        metadata: dict[str, Any] | None = None,
-    ) -> Path:
-        data = {
-            "prompt": prompt,
-            "output": output,
-            "status": status,
-            "metadata": metadata or {},
-        }
-        file_path = self.root / "records.jsonl"
-        with file_path.open("a", encoding="utf-8") as handle:
-            handle.write(json.dumps(data, ensure_ascii=False) + "\n")
-        return file_path
+    def load_tasks(self) -> list[dict[str, Any]]:
+        if not self.tasks_path.exists():
+            raise FileNotFoundError(f"Benchmark tasks file not found: {self.tasks_path}")
+        tasks: list[dict[str, Any]] = []
+        for raw_line in self.tasks_path.read_text(encoding="utf-8", errors="replace").splitlines():
+            if not raw_line.strip():
+                continue
+            try:
+                tasks.append(json.loads(raw_line))
+            except json.JSONDecodeError:
+                continue
+        return tasks
 
-    def export_jsonl(self, file_path: str | Path) -> Path:
-        target = Path(file_path)
-        target.parent.mkdir(parents=True, exist_ok=True)
-        records: list[dict[str, Any]] = []
-        if (self.root / "records.jsonl").exists():
-            for line in (self.root / "records.jsonl").read_text(encoding="utf-8", errors="replace").splitlines():
-                if not line.strip():
-                    continue
-                try:
-                    records.append(json.loads(line))
-                except json.JSONDecodeError:
-                    continue
-        with target.open("w", encoding="utf-8") as handle:
-            for item in records:
-                handle.write(json.dumps(item, ensure_ascii=False) + "\n")
-        return target
+    def evaluate(self, task: dict[str, Any], output: str) -> bool:
+        expected = task.get("expected_keywords") or []
+        if isinstance(expected, str):
+            expected = [expected]
+        if not expected:
+            return bool(output.strip())
+        lower = output.lower()
+        return all(keyword.lower() in lower for keyword in expected)
+
+    def run(self) -> list[dict[str, Any]]:
+        results: list[dict[str, Any]] = []
+        for task in self.load_tasks():
+            output = task.get("output", "")
+            passed = self.evaluate(task, output)
+            results.append({
+                "id": task.get("id", "unknown"),
+                "prompt": task.get("prompt", ""),
+                "passed": passed,
+                "expected_keywords": task.get("expected_keywords", []),
+                "output_preview": output[:300],
+            })
+        return results

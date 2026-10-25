@@ -1,73 +1,46 @@
 from __future__ import annotations
 
-import json
-import time
-from pathlib import Path
-from typing import Any
-
-from .ollama_client import OllamaClient
+from typing import Iterable
 
 
-class MemoryStore:
-    def __init__(self, workspace: Path):
-        self.workspace = workspace.resolve()
-        self.root = self.workspace / ".localcoder"
-        self.root.mkdir(parents=True, exist_ok=True)
-        self.history_path = self.root / "history.jsonl"
-        self.summary_path = self.root / "memory.json"
+DEFAULT_MODEL_PRIORITY = [
+    "qwen2.5-coder:7b",
+    "qwen2.5-coder:3b",
+    "qwen2.5-coder:1.5b",
+]
 
-    def client(self, url: str) -> OllamaClient:
-        return OllamaClient(url)
 
-    def chat(self, **kwargs):
-        client = OllamaClient(kwargs.pop("ollama_url", "http://127.0.0.1:11434"))
-        return client.chat(**kwargs)
+class ModelRouter:
+    def __init__(self, available_models: Iterable[str] | None = None):
+        self.available_models = list(available_models or [])
 
-    def read_history(self) -> list[dict[str, Any]]:
-        if not self.history_path.exists():
-            return []
-        entries: list[dict[str, Any]] = []
-        for line in self.history_path.read_text(encoding="utf-8", errors="replace").splitlines():
-            if not line.strip():
-                continue
-            try:
-                entries.append(json.loads(line))
-            except json.JSONDecodeError:
-                continue
-        return entries
+    def choose(self, preferred: str | None = None, vram_gb: float | None = None) -> str:
+        if preferred and preferred in self.available_models:
+            return preferred
 
-    def record_task(self, prompt: str, result: str, status: str = "completed") -> None:
-        entry = {
-            "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
-            "status": status,
-            "prompt": prompt[:4000],
-            "result": result[:4000],
-        }
-        history = self.read_history()
-        history.append(entry)
-        history = history[-50:]
-        lines = [json.dumps(item, ensure_ascii=False) for item in history]
-        self.history_path.write_text("\n".join(lines) + ("\n" if lines else ""), encoding="utf-8")
+        candidates = list(self.available_models)
+        if preferred and preferred not in candidates:
+            candidates.insert(0, preferred)
 
-        summary = {
-            "updated_at": entry["timestamp"],
-            "latest_status": status,
-            "latest_prompt": entry["prompt"],
-            "latest_result": entry["result"],
-            "recent_count": len(history),
-            "project_name": self.workspace.name,
-        }
-        self.summary_path.write_text(json.dumps(summary, indent=2, ensure_ascii=False), encoding="utf-8")
+        if vram_gb is not None:
+            if vram_gb < 4:
+                low = [m for m in candidates if "1.5b" in m.lower()]
+                if low:
+                    return low[0]
+            if vram_gb < 8:
+                mid = [m for m in candidates if "3b" in m.lower()]
+                if mid:
+                    return mid[0]
 
-    def project_context(self) -> str:
-        history = self.read_history()
-        if not history:
-            return "No prior task memory for this project yet."
-        recent = history[-5:]
-        lines: list[str] = []
-        for item in recent:
-            lines.append(
-                f"- {item.get('timestamp', 'unknown')} | {item.get('status', 'unknown')} | "
-                f"{(item.get('prompt') or '')[:180]}"
-            )
-        return "\n".join(lines)
+        for name in DEFAULT_MODEL_PRIORITY:
+            if name in candidates:
+                return name
+        return candidates[0] if candidates else (preferred or DEFAULT_MODEL_PRIORITY[0])
+
+    def fallback_sequence(self, preferred: str | None = None, vram_gb: float | None = None) -> list[str]:
+        chosen = self.choose(preferred=preferred, vram_gb=vram_gb)
+        seq = [chosen]
+        for candidate in self.available_models + [m for m in DEFAULT_MODEL_PRIORITY if m not in self.available_models]:
+            if candidate not in seq:
+                seq.append(candidate)
+        return seq[:5]
