@@ -1,5 +1,7 @@
 # LocalCoder RTX — built for Priyan
 
+GitHub repository: https://github.com/priyan1436ei-lab/local-llm-
+
 A runnable local coding agent with browser UI and CLI. Give a prompt; it reads and writes actual project files, proposes shell commands, uses their results to repair errors, and continues for up to a bounded number of steps until the task is done or it is blocked.
 
 This project is designed to run on your own machine. It keeps the model, tools, and project files local, so you can work without relying on a hosted API or cloud IDE.
