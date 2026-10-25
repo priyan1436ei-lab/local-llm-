@@ -1,51 +1,97 @@
-"""Check prerequisites, fetch missing model and open the local agent."""
-import shutil
-import subprocess
+from __future__ import annotations
+
+import argparse
 import sys
-import time
 from pathlib import Path
-from .config import Settings
+
+from .agent import CodingAgent
+from .config import Settings, detect_vram_gb
 from .ollama_client import OllamaClient, OllamaError
 
 
-def prepare(settings, client):
-    executable = shutil.which('ollama')
-    if not executable:
-        print('Install Ollama first: https://ollama.com/download/windows')
-        return False
+def main() -> int:
+    parser = argparse.ArgumentParser(
+        prog="localcoder",
+        description="Professional local-first coding agent for Ollama-powered LLM workflows.",
+    )
+    parser.add_argument("prompt", nargs="*", help="Coding task. If omitted, interactive mode starts.")
+    parser.add_argument("--workspace", default="workspace", help="Project folder the agent may edit.")
+    parser.add_argument("--model", help="Override Ollama model, e.g. qwen2.5-coder:3b")
+    parser.add_argument("--ctx", type=int, help="Override context tokens")
+    parser.add_argument("--max-steps", type=int, help="Maximum autonomous actions")
+    parser.add_argument(
+        "--unsafe-commands",
+        action="store_true",
+        help="Auto-approve ALL commands. Only for trusted tasks; not sandboxed.",
+    )
+    args = parser.parse_args()
+
+    settings = Settings.auto()
+    if args.model:
+        settings.model = args.model
+    if args.ctx:
+        settings.num_ctx = args.ctx
+    if args.max_steps:
+        settings.max_steps = args.max_steps
+
+    vram = detect_vram_gb()
+    vram_text = f"{vram:.1f} GB" if vram is not None else "not detected"
+    print("LocalCoder RTX")
+    print("Local-first LLM coding agent")
+    print(f"GPU VRAM : {vram_text}")
+    print(f"Model    : {settings.model}")
+    print(f"Context  : {settings.num_ctx}")
+    print(f"Workspace: {Path(args.workspace).resolve()}")
+    print()
+
+    client = OllamaClient(settings.ollama_url)
     try:
         tags = client.tags()
-    except OllamaError:
-        print('Starting Ollama...')
-        subprocess.Popen([executable, 'serve'], stdout=subprocess.DEVNULL,
-                         stderr=subprocess.DEVNULL)
-        for _ in range(40):
-            time.sleep(.5)
-            try:
-                tags = client.tags()
-                break
-            except OllamaError:
-                pass
-        else:
-            print('Ollama could not start. Open it manually and try again.')
-            return False
-    if settings.model not in {m.get('name') for m in tags.get('models', [])}:
-        print(f'First setup: downloading {settings.model}. Internet is needed once.')
-        if subprocess.call([executable, 'pull', settings.model]) != 0:
-            print('Model download failed. Check your connection and launch again.')
-            return False
-    return True
+    except OllamaError as e:
+        print(f"ERROR: {e}")
+        print("Install/start Ollama, then pull the displayed model.")
+        return 2
+
+    installed = {m.get("name", "") for m in tags.get("models", [])}
+    base_names = {name.split(":")[0] for name in installed}
+    if settings.model not in installed and settings.model.split(":")[0] not in base_names:
+        print(f"WARNING: model may not be installed. Run: ollama pull {settings.model}\n")
+
+    agent = CodingAgent(
+        workspace=Path(args.workspace),
+        settings=settings,
+        allow_any_command=args.unsafe_commands,
+    )
+
+    initial = " ".join(args.prompt).strip()
+    if initial:
+        try:
+            print("\n" + agent.run(initial))
+            return 0
+        except KeyboardInterrupt:
+            print("\nStopped.")
+            return 130
+        except OllamaError as e:
+            print(f"\nERROR: {e}")
+            return 2
+
+    print("Interactive mode. Type /exit to quit. Each prompt continues editing the same workspace.")
+    while True:
+        try:
+            request = input("\nYou > ").strip()
+        except (EOFError, KeyboardInterrupt):
+            print("\nBye.")
+            return 0
+        if not request:
+            continue
+        if request.lower() in {"/exit", "exit", "quit"}:
+            return 0
+        try:
+            result = agent.run(request)
+            print(f"\nAgent > {result}")
+        except OllamaError as e:
+            print(f"ERROR: {e}")
 
 
-def main():
-    print('LOCALCODER RTX | Your local coding agent')
-    settings = Settings.auto()
-    print(f'Model: {settings.model} | Context: {settings.num_ctx}')
-    if not prepare(settings, OllamaClient(settings.ollama_url)):
-        return 1
-    from .web import main as start_web
-    start_web()
-    return 0
-
-if __name__ == '__main__':
+if __name__ == "__main__":
     raise SystemExit(main())
