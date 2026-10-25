@@ -1,14 +1,167 @@
-<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>LocalCoder • Priyan</title>
-<style>
-:root{color-scheme:dark;font:15px system-ui;background:#090c12;color:#dbe4f1}*{box-sizing:border-box}body{margin:0}header{border-bottom:1px solid #263042;padding:22px 5%;display:flex;justify-content:space-between}b{color:#9cf3c7}main{max-width:1200px;margin:36px auto;padding:0 24px}h1{font-size:38px;letter-spacing:-1.6px;margin-bottom:8px}p{color:#95a6bc;line-height:1.6}.grid{display:grid;grid-template-columns:360px 1fr;gap:24px;margin-top:28px}.panel{background:#101722;border:1px solid #263042;border-radius:16px;padding:24px}label{display:block;font-size:12px;color:#aabbce;margin:18px 0 8px}input,select,textarea{width:100%;border:1px solid #354359;background:#090f19;border-radius:8px;color:#edf4ff;padding:12px;font:inherit}textarea{resize:vertical;min-height:150px}button{border:0;border-radius:8px;background:#9cf3c7;color:#10271c;padding:12px 20px;font-weight:700;cursor:pointer;margin:12px 8px 0 0}button.secondary{background:#29364b;color:#e2eafa}button:disabled{opacity:.4;cursor:wait}pre{white-space:pre-wrap;overflow-wrap:anywhere;font:13px/1.6 ui-monospace,monospace}#events{height:380px;overflow:auto}.event{border-bottom:1px solid #273246;padding:10px 0}.muted{color:#8799b1;font-size:13px}#approval{border:1px solid #e3b958;background:#282316;padding:18px;border-radius:10px;margin-top:20px}#result{color:#9cf3c7}a{color:#9cf3c7}@media(max-width:800px){.grid{grid-template-columns:1fr}h1{font-size:30px}}
-</style><header><strong>LOCALCODER <b>/</b> RTX</strong><span class="muted">PRIVATE · LOCAL INFERENCE</span></header><main><h1>Your prompt. Working files.</h1><p>A local coding workspace powered by Ollama. Create, inspect, edit and test your projects.</p><div class="grid"><section class="panel"><strong>Workspace settings</strong><label for="workspace">PROJECT FOLDER (absolute path supported)</label><input id="workspace" placeholder="Leave empty for bundled workspace"><label for="model">LOCAL MODEL</label><select id="model"><option>qwen2.5-coder:3b</option></select><label for="context">CONTEXT</label><select id="context"><option>2048</option><option selected>4096</option><option>8192</option></select><p id="health" class="muted">Checking Ollama…</p><button class="secondary" id="refresh">Refresh models</button><p class="muted">4 / 6 GB: start with 3B + 4096.<br>8 GB: try 7B + 4096.<br>Backups: your-project/.localcoder/backups</p><p class="muted">File edits happen automatically. Each shell command needs approval and can access your computer. Run only code you trust.</p></section><section class="panel"><label for="prompt">WHAT SHOULD WE BUILD?</label><textarea id="prompt" placeholder="Build a responsive portfolio using HTML, CSS and JavaScript. Add a projects section and dark theme."></textarea><button id="start">Build project →</button><button id="stop" class="secondary" disabled>Stop after current action</button><span id="status" class="muted">Ready</span><div id="approval" hidden><strong>Approve command execution</strong><pre id="command"></pre><button id="yes">Run command</button><button id="no" class="secondary">Decline</button></div><div id="events"><p class="muted">Your agent's actions and real tool results will appear here.</p></div><pre id="result"></pre></section></div></main>
-<script>
-const $=id=>document.getElementById(id);const token='__TOKEN__';
-async function api(path,data){const r=await fetch('/api/'+path,{method:data?'POST':'GET',headers:{'Content-Type':'application/json','X-LocalCoder-Token':token},body:data?JSON.stringify(data):undefined});const v=await r.json();if(!r.ok)throw Error(v.error||r.statusText);return v}
-async function health(){try{const v=await api('status');$('health').textContent=v.error? v.error+' Start Ollama, then run ollama pull '+v.default:'Ollama connected · GPU VRAM: '+(v.vram? v.vram.toFixed(1)+' GB':'not detected');$('model').replaceChildren();for(const name of v.models.length?v.models:[v.default]){const o=document.createElement('option');o.textContent=name;o.selected=name===v.default;$('model').append(o)}}catch(e){$('health').textContent=e.message}}
-$('refresh').onclick=health;
-$('start').onclick=async()=>{try{$('start').disabled=true;await api('start',{prompt:$('prompt').value,workspace:$('workspace').value,model:$('model').value,context:+$('context').value})}catch(e){$('result').textContent=e.message;$('start').disabled=false}};
-$('stop').onclick=()=>api('stop',{}).catch(e=>$('result').textContent=e.message);
-for(const [id,allow] of [['yes',true],['no',false]])$(id).onclick=()=>api('approve',{allow}).catch(e=>$('result').textContent=e.message);
-let last='';async function poll(){try{const s=await api('state');$('start').disabled=s.running;$('stop').disabled=!s.running;$('status').textContent=s.running?'Working…':'Ready';$('approval').hidden=!s.pending;$('command').textContent=s.pending||'';$('result').textContent=s.result;const next=JSON.stringify(s.events);if(next!==last){last=next;$('events').replaceChildren();for(const e of s.events){const p=document.createElement('pre');p.className='event';p.textContent=e.result!==undefined?e.result:`${e.step}. ${e.action} — ${e.summary}`;$('events').append(p)}$('events').scrollTop=$('events').scrollHeight}}catch(e){$('status').textContent='Disconnected: restart launcher'}finally{setTimeout(poll,1000)}}health();poll();
-</script></html>
+"""Loopback-only local UI; no third-party Python dependencies."""
+import json
+import secrets
+import threading
+import time
+import webbrowser
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from pathlib import Path
+
+from .agent import CodingAgent
+from .config import Settings, detect_vram_gb
+from .memory import MemoryStore
+from .ollama_client import OllamaClient
+
+BASE = Path(__file__).resolve().parent.parent
+TOKEN = secrets.token_urlsafe(32)
+LOCK = threading.RLock()
+STATE = {'running': False, 'events': [], 'pending': None, 'result': '', 'workspace': '', 'history': []}
+STOP = threading.Event()
+APPROVED = threading.Event()
+DECISION = False
+
+
+def event(data):
+    with LOCK:
+        STATE['events'].append(data)
+        STATE['events'] = STATE['events'][-200:]
+
+
+def approve(command):
+    global DECISION
+    with LOCK:
+        APPROVED.clear()
+        DECISION = False
+        STATE['pending'] = command
+    while not APPROVED.wait(.25):
+        if STOP.is_set():
+            break
+    with LOCK:
+        STATE['pending'] = None
+        return DECISION and not STOP.is_set()
+
+
+def work(data):
+    try:
+        settings = Settings.auto()
+        settings.model = data.get('model') or settings.model
+        settings.num_ctx = int(data.get('context', 4096))
+        if settings.num_ctx not in (2048, 4096, 8192):
+            raise ValueError('Unsupported context size')
+        root = Path(data.get('workspace') or str(BASE/'workspace')).expanduser().resolve()
+        memory = MemoryStore(root)
+        agent = CodingAgent(root, settings, verbose=False)
+        agent.tools.approve = approve
+        agent.on_event = event
+        agent.cancelled = STOP.is_set
+        with LOCK:
+            STATE['workspace'] = str(root)
+            STATE['history'] = memory.read_history()
+        result = agent.run(data['prompt'][:12000])
+        with LOCK:
+            STATE['result'] = result
+            STATE['history'] = memory.read_history()
+    except Exception as exc:
+        with LOCK:
+            STATE['result'] = f'Error: {exc}'
+    finally:
+        with LOCK:
+            STATE['running'] = False
+            STATE['pending'] = None
+            snapshot = dict(STATE)
+        try:
+            logdir = BASE/'runs'
+            logdir.mkdir(exist_ok=True)
+            (logdir/f'{time.time_ns()}.json').write_text(json.dumps(snapshot, indent=2), encoding='utf-8')
+        except OSError:
+            pass
+
+
+class Handler(BaseHTTPRequestHandler):
+    def log_message(self, *_):
+        pass
+
+    def send(self, data, code=200, html=False):
+        body = data.encode() if html else json.dumps(data).encode()
+        self.send_response(code)
+        self.send_header('Content-Type', 'text/html; charset=utf-8' if html else 'application/json')
+        self.send_header('Cache-Control', 'no-store')
+        self.send_header('X-Content-Type-Options', 'nosniff')
+        self.end_headers()
+        self.wfile.write(body)
+
+    def valid_host(self):
+        return self.headers.get('Host') in ('127.0.0.1:8765', 'localhost:8765')
+
+    def do_GET(self):
+        if not self.valid_host():
+            return self.send({'error': 'Invalid host'}, 403)
+        if self.path == '/':
+            return self.send((BASE/'localcoder/ui.html').read_text(encoding='utf-8').replace('__TOKEN__', TOKEN), html=True)
+        if self.headers.get('X-LocalCoder-Token') != TOKEN:
+            return self.send({'error': 'Unauthorized'}, 403)
+        if self.path == '/api/state':
+            with LOCK:
+                return self.send(STATE)
+        if self.path == '/api/history':
+            with LOCK:
+                root = Path(STATE['workspace']).resolve() if STATE['workspace'] else BASE / 'workspace'
+                memory = MemoryStore(root)
+                return self.send({'history': memory.read_history()})
+        if self.path == '/api/status':
+            settings = Settings.auto()
+            try:
+                models = OllamaClient(settings.ollama_url).tags().get('models', [])
+                self.send({'models': [m['name'] for m in models], 'default': settings.model, 'vram': detect_vram_gb()})
+            except Exception as exc:
+                self.send({'error': str(exc), 'default': settings.model, 'models': []})
+            return
+        self.send({'error': 'Not found'}, 404)
+
+    def do_POST(self):
+        global DECISION
+        if not self.valid_host() or self.headers.get('X-LocalCoder-Token') != TOKEN:
+            return self.send({'error': 'Unauthorized'}, 403)
+        try:
+            size = int(self.headers.get('Content-Length', '0'))
+            if not 0 < size <= 32000:
+                raise ValueError('Invalid request size')
+            data = json.loads(self.rfile.read(size))
+            with LOCK:
+                if self.path == '/api/start':
+                    if STATE['running']:
+                        return self.send({'error': 'A task is already running'}, 409)
+                    if not isinstance(data.get('prompt'), str) or not data['prompt'].strip():
+                        raise ValueError('Enter a prompt')
+                    STATE.update(running=True, events=[], pending=None, result='')
+                    STOP.clear()
+                    threading.Thread(target=work, args=(data,), daemon=True).start()
+                elif self.path == '/api/approve':
+                    if STATE['pending'] is None:
+                        raise ValueError('No pending command')
+                    DECISION = data.get('allow') is True
+                    APPROVED.set()
+                elif self.path == '/api/stop':
+                    STOP.set()
+                    APPROVED.set()
+                else:
+                    return self.send({'error': 'Not found'}, 404)
+            self.send({'ok': True})
+        except (ValueError, TypeError) as exc:
+            self.send({'error': str(exc)}, 400)
+
+
+def main():
+    server = ThreadingHTTPServer(('127.0.0.1', 8765), Handler)
+    print('LocalCoder RTX: http://127.0.0.1:8765 — Ctrl+C to exit')
+    webbrowser.open('http://127.0.0.1:8765')
+    try:
+        server.serve_forever()
+    except KeyboardInterrupt:
+        STOP.set()
+    finally:
+        server.server_close()
+
+
+if __name__ == '__main__':
+    main()
