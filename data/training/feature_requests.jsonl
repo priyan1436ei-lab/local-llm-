@@ -1,0 +1,24 @@
+# LocalCoder training bundle
+
+This directory contains a larger ready-to-use local training set with labeled examples.
+
+## Included files
+
+- `feature_requests.jsonl`
+- `bug_fix_tasks.jsonl`
+- `benchmark_tasks.jsonl`
+
+## Labels used
+
+Each record contains:
+- `task_type`: feature_request, bug_fix, benchmark
+- `difficulty`: easy, medium, hard
+- `domain`: web, python, javascript, general
+- `expected_keywords`: acceptance keywords used during benchmark evaluation
+
+## Suggested flow
+
+1. Generate or collect prompts.
+2. Store task outputs and validation results.
+3. Export filtered records for model training.
+4. Benchmark prompt quality with `scripts/run_benchmark.py`.
