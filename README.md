@@ -1,81 +1,108 @@
-# LocalCoder RTX — built for Priyan
+# LocalCoder RTX — Local AI Coding Agent for Priyan
 
 GitHub repository: https://github.com/priyan1436ei-lab/local-llm-
 
-A runnable local coding agent with browser UI and CLI. Give a prompt; it reads and writes actual project files, proposes shell commands, uses their results to repair errors, and continues for up to a bounded number of steps until the task is done or it is blocked.
+A professional-grade local coding agent designed to run entirely on a developer's machine. It combines a local LLM, a workspace-aware tool loop, and a browser or CLI interface to allow natural-language software development without sending code to a cloud service.
 
-This project is designed to run on your own machine. It keeps the model, tools, and project files local, so you can work without relying on a hosted API or cloud IDE.
+This project is built for people who want:
 
-## Project overview
+- local-first AI coding
+- transparent command execution
+- real project editing inside a workspace
+- safer experimentation with Ollama-hosted models
+- a practical platform for training, evaluation, and AI workflow research
 
-LocalCoder combines three parts:
+## Why this project matters
 
-- A local Ollama model for reasoning and code generation
-- A workspace-aware tool loop for reading, editing, and running commands
-- A browser UI or CLI for prompting and approval
+Most AI coding tools are either hosted in the cloud or restricted to a browser sandbox. LocalCoder takes a different approach: it brings the model, tool execution, and code editing loop onto the same machine.
 
-The core agent logic lives in `localcoder/agent.py` and the workspace tool layer is in `localcoder/tools.py`. The UI is served by `localcoder/web.py`, and the Ollama integration is handled in `localcoder/ollama_client.py`.
+This creates a workflow where the agent can:
 
-## Why this project exists
+- inspect a project folder
+- read only necessary files
+- make targeted code changes
+- propose and run terminal commands
+- debug failures using output from the terminal
+- continue iterating until the task is complete
 
-Many coding agents assume cloud access, browser-based editors, or remote infrastructure. This one is built for a local developer workflow:
+That makes it useful for rapid prototyping, app generation, debugging workflows, and local experimentation with open-source LLMs.
 
-- Open a project folder
-- Ask for a feature, bug fix, or site build
-- Let the agent inspect files and plan changes
-- Approve shell commands before execution
-- Iterate until the project runs
+## Project highlights
 
-This makes it useful for:
+- Local-first AI coding assistant
+- Ollama integration for model-backed reasoning
+- Browser UI and CLI support
+- Workspace file read/write/edit tools
+- Approval flow for shell command execution
+- Automatic backups for overwritten files
+- Safe path constraints inside the project workspace
+- Lightweight architecture suitable for experimentation and research
 
-- quick prototypes
-- local app generation
-- experimenting with open-source coding models
-- learning how agentic workflows behave on real codebases
+## Architecture
 
-## Agent architecture
+The repository is organized around a simple but effective agent loop:
 
-The agent follows a simple repeat-until-done pattern:
-
-1. Inspect the current workspace
-2. Read only the files needed for the task
+1. Load the user's prompt
+2. Inspect the current workspace
 3. Decide the next tool action
-4. Execute one action at a time
-5. Review command output or file errors
-6. Fix the issue and continue
-7. Finish when the task is complete
+4. Read or edit the relevant files
+5. Run tests, builds, or validation commands
+6. Use the output to repair errors and continue
+7. Finish when the task is complete or blocked
 
-Supported actions in the core loop include:
+Core components:
 
-- `list_files` to inspect the project tree
-- `read_file` to open specific source files
-- `write_file` to create or overwrite a file
-- `replace_in_file` to perform an exact edit
-- `run_command` to execute build, test, or dev commands
-- `finish` to stop once the request is satisfied
+- `localcoder/agent.py` — central coding agent loop and action schema
+- `localcoder/tools.py` — workspace tools for listing, reading, writing, and command execution
+- `localcoder/config.py` — model selection, VRAM-aware defaults, and runtime settings
+- `localcoder/ollama_client.py` — interface to the Ollama server
+- `localcoder/web.py` — browser-based UI backend
+- `localcoder/ui.html` — frontend interface for the local browser app
 
-The agent is intentionally conservative:
+## Agent behavior
 
-- it never leaves the workspace
-- it avoids destructive commands by default
-- it requires command approval unless `--unsafe-commands` is explicitly enabled
-- it keeps backups of overwritten files in `.localcoder/backups/`
-- it records session activity near the launcher for later review
+The agent is designed to operate in a bounded iterative loop. It does not blindly generate code; it works through a tool-driven workflow.
 
-## Dataset and training notes
+Supported actions include:
 
-This repository is not a full fine-tuning or dataset-training pipeline in the traditional ML sense. It is primarily an agent runner and local tool system for coding tasks. However, it is useful as a base for building a dataset-driven workflow.
+- `list_files` for project exploration
+- `read_file` for targeted inspection
+- `write_file` to create or overwrite files
+- `replace_in_file` for exact edits
+- `run_command` to execute tests, builds, or scripts
+- `finish` when the task is satisfied
 
-### What the project does today
+Important safety features:
 
-- Uses a local Ollama model for code generation and reasoning
-- Creates an instruction-following workflow around a workspace
-- Executes real commands against a project, not just static templates
-- Captures outputs, logs, and generated files from each session
+- workspace isolation: no access outside the working folder
+- hidden metadata protection: `.git` and `.localcoder` are excluded
+- command approval by default
+- backups for overwritten files
+- explicit trust required for destructive or unrestricted execution
 
-### How you can structure your own dataset
+## Professional LLM workflow
 
-If you want to build a dataset around this project, a practical setup could look like this:
+This project is not just a chatbot wrapper. It functions more like a local AI software agent:
+
+- prompt-driven execution
+- file-aware reasoning
+- tool use grounded in project state
+- iterative development based on test/build results
+- step-limited autonomous behavior for practical control
+
+This is especially useful for:
+
+- building landing pages and web apps
+- creating Python scripts and modules
+- debugging failing code
+- refining project structure iteratively
+- collecting examples for fine-tuning or evaluation pipelines
+
+## Dataset and training use cases
+
+This repository is a strong foundation for local AI experimentation and dataset creation. While it is not a dedicated training framework by itself, it is highly useful for creating real-world AI development datasets.
+
+A practical dataset structure could be:
 
 ```text
 data/
@@ -92,126 +119,70 @@ data/
     test_results/
 ```
 
-A good dataset entry can include:
+Useful dataset fields:
 
-- task description or user prompt
-- initial project state
-- expected output or acceptance criteria
-- command history
-- final file content or result summary
+- user prompt
+- repository state before the task
+- expected deliverable or acceptance criteria
+- tool history and shell commands
+- final code output
+- validation/test results
+- failure reason and repair attempts
 
-For custom training flows, you can collect:
+This makes the project valuable for:
 
-- successful prompt-to-project examples
-- failed runs and their debug traces
-- repaired code after test failures
-- generated tests and corresponding fixes
+- supervised fine-tuning examples
+- agent trajectory collection
+- benchmark generation
+- local LLM evaluation pipelines
 
-This is especially useful for creating supervised examples for future fine-tuning or evaluation pipelines.
+## Example prompts
 
-### Training mindset for this project
-
-The repo is best understood as a local “agent training sandbox” instead of a standalone model trainer. In other words, you can use it to:
-
-- test prompt quality
-- measure how well a model handles repo editing tasks
-- collect examples of agent behavior
-- benchmark success/failure loops on real projects
-
-If you later want to train a model, the patterns in this project are a good source for:
-
-- instruction-response pairs
-- code generation tasks
-- bug fixing trajectories
-- tool-use sequences
-
-## Example workflows
-
-### Build a website
+### Web app creation
 
 ```text
 Build a responsive personal portfolio for Priyan using only HTML, CSS and JavaScript. Include hero, about, skills, projects and contact sections. Use a dark theme with lime accents. Write all files in the workspace.
 ```
 
-### Improve an existing project
+### Existing project update
 
 ```text
 Read the current project. Add a mobile menu and a theme switcher. Preserve the existing content.
 ```
 
-### Build Python logic and validate it
+### Python task with validation
 
 ```text
 Create a Python calculator module with add, subtract, multiply and divide functions. Write unittest tests including division by zero. Run the tests and fix failures.
 ```
 
-## Windows: start here
+## Windows quick start
 
-1. Extract this ZIP completely.
-2. Install **Python 3.10+**, including the Windows `py` launcher: https://www.python.org/downloads/
-3. Install **Ollama**, open it, and keep it running: https://ollama.com/download/windows
-4. Double-click **START_HERE.bat**. It starts Ollama if needed, downloads the selected model if missing, then opens the agent UI.
-5. Wait for the first model download. Open http://127.0.0.1:8765 if the browser does not open.
-6. Leave the project folder blank to use `workspace`, or enter your project folder's full path.
-7. Enter a prompt, click **Build project**, and approve commands when appropriate.
+1. Install Python 3.10+ with the Windows launcher.
+2. Install Ollama and keep it running.
+3. Download the model from Ollama.
+4. Run `START_HERE.bat` or launch the agent UI.
+5. Open the local browser at `http://127.0.0.1:8765` if needed.
+6. Enter a prompt and approve commands when prompted.
 
-No pip packages or cloud API keys required. Initial Python/Ollama/model downloads require internet. Inference works offline after download. Dependency installation for generated projects may still require network access if the generated app installs packages.
+## Hardware recommendations
 
-## First prompt
-
-```text
-Build a responsive personal portfolio for Priyan using only HTML, CSS and JavaScript. Include hero, about, skills, projects and contact sections. Use a dark theme with lime accents. Write all files in the workspace.
-```
-
-Then try:
-
-```text
-Read the current project. Add a mobile menu and a theme switcher. Preserve the existing content.
-```
-
-For Python:
-
-```text
-Create a Python calculator module with add, subtract, multiply and divide functions. Write unittest tests including division by zero. Run the tests and fix failures.
-```
-
-## Hardware profiles
-
-| GPU VRAM | Automatic model | Context |
+| GPU VRAM | Recommended model | Context |
 |---|---|---|
 | Unknown / 4 / 6 GB | qwen2.5-coder:3b | 4096 |
 | 8 GB or more | qwen2.5-coder:7b | 4096 |
 
-These are conservative starting profiles, not GPU benchmark results or guaranteed VRAM fits. Ollama may offload layers to CPU depending on free VRAM and other processes. System RAM and context also matter.
+These are conservative defaults. Real performance depends on your GPU, CPU, RAM, and model size.
 
-If memory is tight, use 2048 context or download the smaller model:
+If memory is tight, consider:
 
 ```powershell
 ollama pull qwen2.5-coder:1.5b
 ```
 
-Click **Refresh models** and select it. To try 7B manually, run `ollama pull qwen2.5-coder:7b`. The model catalog lists 3B at about 1.9 GB and 7B at about 4.7 GB; runtime memory is additional.
+and reduce context size if needed.
 
-## What is included
-
-- Local browser interface with installed model selection and progress polling.
-- Workspace file listing, reading, writing and exact replacement.
-- Model → tool → result → repair loop with bounded step count.
-- Explicit approval for every shell command by default.
-- Overwritten-file backups in `PROJECT/.localcoder/backups/TIMESTAMP/`.
-- Session logs in `runs/` beside the launcher; these can contain your code/output.
-- Cancellation between actions. An active model call can take up to 10 minutes to return; an active command ends on completion or its timeout. Stop does not undo edits.
-- CLI mode and automated tests.
-
-Backups are per overwritten file, not a complete transactional snapshot. To restore, stop the agent and copy the desired backed-up file to its original relative path. Newly created files have no backup until they are overwritten.
-
-## Command execution and local access
-
-File tools reject paths outside the project and internal `.git`/`.localcoder` metadata. Shell commands and generated programs **are not sandboxed** and can access your computer or network. The UI itself is local-only and intended to be run by a single user.
-
-The UI binds only to 127.0.0.1, checks the Host header and uses a per-launch request token. It is a single-user local tool; do not expose its port publicly. Generated HTML is shown as text, never as raw page output, and the interface is meant to stay local to the machine it is running on.
-
-## CLI
+## CLI usage
 
 ```powershell
 py -3 -m localcoder --workspace workspace "Build a static todo website"
@@ -219,38 +190,55 @@ py -3 -m localcoder --workspace "C:\Projects\myrepo" --model qwen2.5-coder:3b --
 py -3 -m unittest discover -s tests -v
 ```
 
-Interactive CLI: omit the prompt; type `/exit` to quit. CLI requests command approval in the terminal. The `--unsafe-commands` flag auto-approves all shell execution and is only for explicitly trusted workflows.
+Interactive mode:
 
-Linux/macOS: install Python/Ollama, pull the model, then run `python3 -m localcoder.web` from this folder. GPU support depends on your platform and Ollama.
+- omit the prompt
+- type `/exit` to quit
+- shell commands require approval unless `--unsafe-commands` is used
 
-## Troubleshooting
+## Security and trust model
 
-- **Ollama unavailable:** open Ollama or run `ollama serve`; retry Refresh models.
-- **Model missing / HTTP 404:** `ollama pull qwen2.5-coder:3b`; choose the exact downloaded tag.
-- **Slow or out of memory:** close GPU-heavy programs, use 1.5B/3B and 2048 context. Avoid large whole-repository prompts.
-- **py not found:** install the Python Windows launcher, or run `python -m localcoder.web` manually.
-- **Port 8765 already used:** stop the earlier LocalCoder process before restarting.
-- **Step limit reached:** inspect the files and give a focused follow-up prompt.
-- **Command fails:** approve a suitable fix proposed by the agent, or install the required runtime.
+This tool is intentionally local and explicit about trust boundaries.
+
+Important notes:
+
+- shell commands are not sandboxed
+- generated programs can access your computer and network
+- command approval is required by default
+- file tools reject paths outside the workspace
+- backups are stored under `.localcoder/backups`
+
+Use this tool only in environments you trust.
 
 ## Validation and limitations
 
-Automated tests use a scripted fake model to validate orchestration, tool errors, backups, approval, cancellation and path protection. They do not measure real model quality. Real Ollama inference still depends on the model and your hardware.
+This project includes test coverage for orchestration, tool behavior, backups, approval flow, cancellation, and path protection. However, these tests validate system logic, not the quality of a specific LLM.
 
-This version has no fine-tuning pipeline, full IDE editor, deployment service or persistent model conversation between separate runs. Follow-up runs read current project files. Existing datasets are not automatically imported into the tool loop; they must be prepared by the user if you want to build a training or evaluation dataset around the agent.
+Current limitations:
 
-Official references: https://ollama.com/library/qwen2.5-coder and https://docs.ollama.com/api/chat
+- no full IDE editor
+- no persistent cross-run memory by default
+- no cloud deployment pipeline
+- no advanced dataset ingestion system built in
+- no full fine-tuning pipeline included
 
-# local-llm-
+## Roadmap ideas
 
-This repository is a compact local-first coding agent environment built around Ollama and a filesystem-aware tool loop. It is designed for prompt-driven app generation, editing, and iterative debugging without sending code to a remote service.
+This project can be extended with:
 
-If you want to extend it, the most productive next steps are:
+- more robust project scaffolding templates
+- better memory across sessions
+- dataset collection and benchmark scripts
+- stronger metric tracking for agent performance
+- improved UI for task history and project summaries
+- support for additional local model providers and routers
 
-- add richer project scaffolding templates
-- build dataset collection scripts for prompt-to-output examples
-- add stronger model evaluation and benchmarking
-- improve agent memory and project context handling
-- expand browser UX for task history and project summaries
+## License
 
-The system is intentionally simple and transparent: a local model, a file tool layer, a command approval gate, and a loop that tries again after errors.
+This project is released under the MIT license. See `LICENSE` for details.
+
+## Summary
+
+LocalCoder RTX is a practical local AI coding agent built around the idea that real software work needs real file access, real tools, and real command execution. It is a strong base for local development, LLM experimentation, dataset collection, and AI-assisted engineering in a developer-controlled environment.
+
+The project is especially valuable for anyone who wants a professional local AI coding workflow without depending on hosted APIs or remote infrastructure.
