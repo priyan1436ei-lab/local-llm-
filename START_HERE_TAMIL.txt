@@ -1,0 +1,17 @@
+PRIYAN — LOCALCODER RTX
+
+1. ZIP-ai full-aa extract pannunga.
+2. Python 3.10+ install pannunga: https://www.python.org/downloads/
+3. Ollama install pannunga: https://ollama.com/download/windows
+4. START_HERE.bat double-click pannunga.
+5. First run-la model download aagum. Adhu mudinja browser UI open aagum.
+6. Project folder select pannitu prompt type panni Build project click pannunga.
+
+Example:
+Build a Python calculator with unittest tests. Run tests and fix errors.
+
+Code files automatic-aa project folder-la save aagum.
+Commands run panna approval varum. Read pannitu approve pannunga.
+4GB/6GB VRAM default: 3B model. 8GB+: 7B model.
+Small tasks-aa kudutha local model-ku easier. Every output correct nu guarantee illa.
+Model weights ZIP-la illa; first run download pannum. Cloud API key thevai illa.

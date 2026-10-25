@@ -1,0 +1,4 @@
+Build validation
+- 9 automated tests passed, including HTTP prompt -> file -> command approval -> execution -> finish. Model responses are scripted.
+- Python compilation and local HTTP protection checks passed.
+- Real Ollama inference, Windows execution and RTX GPU performance not tested.
